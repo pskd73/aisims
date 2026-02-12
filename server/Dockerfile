@@ -28,4 +28,5 @@ COPY --from=builder /app/server/dist ./dist
 
 EXPOSE 3001
 
-CMD ["node", "dist/server/index.js"]
+# rootDir ".." gives dist/server/src/index.js and dist/shared/*
+CMD ["node", "dist/server/src/index.js"]

@@ -26,15 +26,8 @@ RUN rm -rf /usr/share/nginx/html/*
 # Copy built assets from builder
 COPY --from=builder /app/client/dist /usr/share/nginx/html
 
-# Optional: custom nginx config (e.g. for SPA fallback and API proxy)
-RUN echo 'server { \
-    listen 80; \
-    root /usr/share/nginx/html; \
-    index index.html; \
-    location / { \
-      try_files $uri $uri/ /index.html; \
-    } \
-  }' > /etc/nginx/conf.d/default.conf
+# SPA fallback: serve index.html for client routes
+COPY client/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
