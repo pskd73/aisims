@@ -1,0 +1,23 @@
+# Dependencies and build output
+server/node_modules
+server/dist
+client/node_modules
+client/dist
+
+# Git and env
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+client/.env.example
+
+# IDE and OS
+.cursor
+.vscode
+*.swp
+.DS_Store
+
+# Docs and misc (optional)
+*.md
+!README.md
