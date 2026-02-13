@@ -4,13 +4,8 @@ import { apiBaseUrl } from '../config';
 const API_URL = `${apiBaseUrl}/api/exchange`;
 const MEMORY_API_URL = `${apiBaseUrl}/api/memory`;
 const MOVE_API_URL = `${apiBaseUrl}/api/move`;
+const HARM_API_URL = `${apiBaseUrl}/api/harm`;
 
-// Object type definitions - add new object types here
-// Each object has:
-// - type: unique identifier
-// - emoji: visual representation
-// - description: behavior explanation for the LLM
-// - passable: whether players can walk through it
 export const OBJECT_DEFINITIONS = [
   {
     type: 'rock',
@@ -40,7 +35,6 @@ export const OBJECT_DEFINITIONS = [
 
 export type ObjectType = typeof OBJECT_DEFINITIONS[number]['type'];
 
-// Generate object descriptions for tool prompts
 function getObjectDescriptions(): string {
   return OBJECT_DEFINITIONS.map(obj => 
     `- ${obj.emoji} ${obj.type}: ${obj.description}`
@@ -232,20 +226,8 @@ export function getTools(): LLMTool[] {
     {
       type: 'function',
       function: {
-        name: 'exchangeDirectory',
-        description: 'Look up the public directory to find service providers like excavators. Returns their IDs so you can message them for help.',
-        parameters: {
-          type: 'object',
-          properties: {},
-          required: []
-        }
-      }
-    },
-    {
-      type: 'function',
-      function: {
         name: 'removeObject',
-        description: 'Remove an object from the world at a specific position. Only excavators can use this action. You must be adjacent to the object (within 1 cell) to remove it.',
+        description: 'Remove an object from the world at a specific position. You must be adjacent to the object (within 1 cell) to remove it.',
         parameters: {
           type: 'object',
           properties: {
@@ -259,6 +241,40 @@ export function getTools(): LLMTool[] {
             }
           },
           required: ['x', 'y']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'harm',
+        description: 'Harm another player by reducing their health by 1. You must be adjacent (within 1 cell) to the target.',
+        parameters: {
+          type: 'object',
+          properties: {
+            targetId: {
+              type: 'string',
+              description: 'The ID of the player to harm'
+            }
+          },
+          required: ['targetId']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'heal',
+        description: 'Heal another player by increasing their health by 2. You must be adjacent (within 1 cell) to the target.',
+        parameters: {
+          type: 'object',
+          properties: {
+            targetId: {
+              type: 'string',
+              description: 'The ID of the player to heal'
+            }
+          },
+          required: ['targetId']
         }
       }
     }
@@ -426,14 +442,12 @@ export async function executeTool(
       if (!objectType || x === undefined || y === undefined) {
         return { success: false, message: 'Missing objectType, x, or y coordinates' };
       }
-      // Validate it's adjacent
       const currentPos = ctx.context.position;
       const dx = Math.abs(x - currentPos.x);
       const dy = Math.abs(y - currentPos.y);
       if (dx > 1 || dy > 1 || (dx === 0 && dy === 0)) {
         return { success: false, message: `Can only place objects adjacent to your position (${currentPos.x}, ${currentPos.y}). You tried (${x}, ${y}) which is ${dx} cells away in X and ${dy} cells away in Y.` };
       }
-      // Check if position is occupied by another object
       const existingObject = ctx.context.nearbyObjects.find(obj => 
         obj.position.x === x && obj.position.y === y
       );
@@ -443,26 +457,6 @@ export async function executeTool(
       ctx.onPlaceObject(objectType, x, y);
       return { success: true, message: `Placing ${objectType} at (${x}, ${y})` };
     }
-
-    case 'exchangeDirectory':
-      try {
-        const response = await fetch(`${API_URL}/directory`);
-        const data = await response.json();
-        if (response.ok) {
-          const excavators = data.excavators as Array<{ id: string; name: string; role: string }>;
-          if (excavators.length === 0) {
-            return { success: true, message: 'No service providers currently available in the directory' };
-          }
-          const formatted = excavators.map(e => 
-            `${e.name} (role: ${e.role}) - ID: ${e.id}`
-          ).join('\n');
-          return { success: true, message: `Available service providers:\n${formatted}\n\nYou can message them using exchangeSend with their ID.` };
-        } else {
-          return { success: false, message: data.error || 'Failed to fetch directory' };
-        }
-      } catch (error) {
-        return { success: false, message: 'Network error fetching directory' };
-      }
 
     case 'removeObject': {
       const x = args.x as number;
@@ -487,6 +481,56 @@ export async function executeTool(
         }
       } catch (error) {
         return { success: false, message: 'Network error removing object' };
+      }
+    }
+
+    case 'harm': {
+      const targetId = args.targetId as string;
+      if (!targetId) {
+        return { success: false, message: 'Missing targetId' };
+      }
+      try {
+        const response = await fetch(`${HARM_API_URL}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${ctx.apiKey}`
+          },
+          body: JSON.stringify({ targetId })
+        });
+        const data = await response.json();
+        if (response.ok) {
+          return { success: true, message: data.message || 'Player harmed successfully' };
+        } else {
+          return { success: false, message: data.error || 'Failed to harm player' };
+        }
+      } catch (error) {
+        return { success: false, message: 'Network error harming player' };
+      }
+    }
+
+    case 'heal': {
+      const targetId = args.targetId as string;
+      if (!targetId) {
+        return { success: false, message: 'Missing targetId' };
+      }
+      try {
+        const response = await fetch(`${HARM_API_URL}/heal`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${ctx.apiKey}`
+          },
+          body: JSON.stringify({ targetId })
+        });
+        const data = await response.json();
+        if (response.ok) {
+          return { success: true, message: data.message || 'Player healed successfully' };
+        } else {
+          return { success: false, message: data.error || 'Failed to heal player' };
+        }
+      } catch (error) {
+        return { success: false, message: 'Network error healing player' };
       }
     }
 

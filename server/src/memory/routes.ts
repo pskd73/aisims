@@ -1,14 +1,15 @@
 import { Router, Request, Response } from 'express';
 import { AuthManager } from '../auth/AuthManager.js';
 import { MemoryManager } from './MemoryManager.js';
+import { World } from '../game/World.js';
 
 export function createMemoryRouter(
   authManager: AuthManager,
-  memoryManager: MemoryManager
+  memoryManager: MemoryManager,
+  world: World
 ): Router {
   const router = Router();
 
-  // Middleware to validate API key
   const requireAuth = (req: Request, res: Response, next: Function) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -25,7 +26,6 @@ export function createMemoryRouter(
     next();
   };
 
-  // POST /api/memory/memorise - Add a memory
   router.post('/memorise', requireAuth, (req: Request, res: Response) => {
     const auth = (req as any).auth;
     const { content } = req.body;
@@ -34,13 +34,21 @@ export function createMemoryRouter(
       return res.status(400).json({ error: 'Missing or invalid content' });
     }
 
+    const player = world.getPlayer(auth.playerId);
+    if (!player || !player.isAlive()) {
+      return res.status(403).json({ error: 'Player is incapacitated (health is 0)' });
+    }
+
     const memory = memoryManager.addMemory(auth.playerId, content);
     res.json({ success: true, memory });
   });
 
-  // GET /api/memory - Get all memories
   router.get('/', requireAuth, (req: Request, res: Response) => {
     const auth = (req as any).auth;
+    const player = world.getPlayer(auth.playerId);
+    if (!player || !player.isAlive()) {
+      return res.status(403).json({ error: 'Player is incapacitated (health is 0)' });
+    }
     const memories = memoryManager.getMemories(auth.playerId);
     res.json({ memories });
   });

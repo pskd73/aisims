@@ -11,7 +11,6 @@ export interface ExchangeMessage {
 }
 
 export class ExchangeManager {
-  // playerId -> all messages involving this player (as sender or recipient)
   private messages: Map<string, ExchangeMessage[]> = new Map();
   private notificationManager: NotificationManager;
 
@@ -36,17 +35,14 @@ export class ExchangeManager {
       timestamp: Date.now()
     };
 
-    // Add to sender's messages
     const senderMessages = this.messages.get(fromId) || [];
     senderMessages.push(message);
     this.messages.set(fromId, senderMessages);
 
-    // Add to recipient's messages
     const recipientMessages = this.messages.get(toId) || [];
     recipientMessages.push(message);
     this.messages.set(toId, recipientMessages);
 
-    // Create notification for recipient
     this.notificationManager.addNotification(toId, {
       type: 'message',
       title: `New message from ${fromName}`,
@@ -61,13 +57,11 @@ export class ExchangeManager {
     return message;
   }
 
-  // Get messages where player is the recipient
   getInbox(playerId: string): ExchangeMessage[] {
     const playerMessages = this.messages.get(playerId) || [];
     return playerMessages.filter(m => m.toId === playerId);
   }
 
-  // Get messages where player is the sender
   getSent(playerId: string): ExchangeMessage[] {
     const playerMessages = this.messages.get(playerId) || [];
     return playerMessages.filter(m => m.fromId === playerId);

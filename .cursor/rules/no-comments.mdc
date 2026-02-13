@@ -1,0 +1,42 @@
+---
+description: Do not add comments in code - code should be self-documenting
+alwaysApply: true
+---
+
+# No Comments Rule
+
+Do not add comments to code. Write self-documenting code instead.
+
+## Guidelines
+
+- Use descriptive variable and function names that explain their purpose
+- Break complex logic into well-named functions
+- Use clear, expressive code structure
+- If code needs explanation, refactor it to be clearer rather than adding comments
+
+## Examples
+
+```typescript
+// ❌ BAD - Using comments
+// Calculate total price including tax
+const total = price * 1.1;
+
+// ✅ GOOD - Self-documenting code
+const totalPriceWithTax = calculateTotalWithTax(basePrice);
+```
+
+```typescript
+// ❌ BAD - Comment explaining what code does
+// Check if user is authenticated
+if (user && user.token) {
+  // ...
+}
+
+// ✅ GOOD - Clear conditional logic
+const isUserAuthenticated = user?.token !== undefined;
+if (isUserAuthenticated) {
+  // ...
+}
+```
+
+When writing code, prioritize clarity and self-documentation over comments.

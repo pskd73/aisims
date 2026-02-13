@@ -58,21 +58,26 @@ export class WebSocketHandler {
   }
 
   private sendHeartbeats(): void {
-    // Cleanup disconnected players who haven't reconnected in 30 seconds
     this.world.cleanupDisconnectedPlayers(30000);
     
     for (const [ws, client] of this.clients) {
       if (ws.readyState === WebSocket.OPEN && client.playerId) {
+        const player = this.world.getPlayer(client.playerId);
+        if (!player || !player.isAlive()) {
+          continue;
+        }
         const notifications = this.notificationManager.getAndFlush(client.playerId);
         const memories = this.memoryManager.getMemories(client.playerId);
+        const now = Date.now();
         const heartbeat: HeartbeatMessage = {
           type: 'heartbeat',
           notifications: notifications.length > 0 ? notifications : undefined,
-          memories: memories.length > 0 ? memories : undefined
+          memories: memories.length > 0 ? memories : undefined,
+          worldTime: { createdAt: this.world.getCreatedAt(), serverTime: now },
+          health: player.getHealth()
         };
         ws.send(JSON.stringify(heartbeat));
       } else if (ws.readyState === WebSocket.OPEN) {
-        // Player not joined yet, send empty heartbeat
         ws.send(JSON.stringify({ type: 'heartbeat' }));
       }
     }
@@ -100,7 +105,6 @@ export class WebSocketHandler {
     ws.on('close', () => {
       const client = this.clients.get(ws);
       if (client?.playerId) {
-        // Mark player as disconnected (they can reconnect within 30 seconds)
         this.world.removePlayer(client.playerId);
       }
       this.clients.delete(ws);
@@ -138,10 +142,9 @@ export class WebSocketHandler {
     const client = this.clients.get(ws);
     if (!client) return;
 
-    const player = this.world.addPlayer(message.playerId, message.name);
+    const player = this.world.addPlayer(message.playerId, message.name, message.model);
     client.playerId = message.playerId;
 
-    // Generate API key for the player
     const apiKey = this.authManager.generateKey(message.playerId, message.name);
 
     this.sendTo(ws, {
@@ -168,7 +171,6 @@ export class WebSocketHandler {
     if (!client?.playerId) return;
 
     const playerId = client.playerId;
-    // Intentional leave - full cleanup
     this.world.removePlayer(playerId);
     this.world.cleanupDisconnectedPlayers(0); // Force immediate cleanup
     this.authManager.removePlayer(playerId);
@@ -189,6 +191,15 @@ export class WebSocketHandler {
       this.sendTo(ws, {
         type: 'error',
         message: 'Not joined'
+      });
+      return;
+    }
+
+    const player = this.world.getPlayer(client.playerId);
+    if (!player || !player.isAlive()) {
+      this.sendTo(ws, {
+        type: 'error',
+        message: 'Player is incapacitated (health is 0)'
       });
       return;
     }
@@ -214,6 +225,15 @@ export class WebSocketHandler {
       this.sendTo(ws, {
         type: 'error',
         message: 'Not joined'
+      });
+      return;
+    }
+
+    const player = this.world.getPlayer(client.playerId);
+    if (!player || !player.isAlive()) {
+      this.sendTo(ws, {
+        type: 'error',
+        message: 'Player is incapacitated (health is 0)'
       });
       return;
     }
@@ -246,10 +266,16 @@ export class WebSocketHandler {
       });
       return;
     }
+    if (!player.isAlive()) {
+      this.sendTo(ws, {
+        type: 'error',
+        message: 'Player is incapacitated (health is 0)'
+      });
+      return;
+    }
 
     const position = { x: message.x, y: message.y };
 
-    // Check if position is adjacent to player (including diagonals)
     if (!this.world.isAdjacentToPlayer(client.playerId, position)) {
       this.sendTo(ws, {
         type: 'error',
@@ -258,7 +284,6 @@ export class WebSocketHandler {
       return;
     }
 
-    // Check bounds
     const state = this.world.getState();
     if (position.x < 0 || position.x >= state.gridSize.width || 
         position.y < 0 || position.y >= state.gridSize.height) {
@@ -269,7 +294,6 @@ export class WebSocketHandler {
       return;
     }
 
-    // Try to place the object
     const object = this.world.placeObject(
       message.objectType,
       position,

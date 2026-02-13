@@ -17,7 +17,6 @@ export class MemoryManager {
     };
     
     playerMemories.push(memory);
-    // Keep only last 50 memories
     if (playerMemories.length > 500) {
       playerMemories.shift();
     }

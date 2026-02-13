@@ -17,7 +17,7 @@
 }
 
 body {
-  font-family: 'Press Start 2P', monospace;
+  font-family: "Press Start 2P", monospace;
   background-color: var(--bg-darker);
   color: var(--text);
   font-size: 10px;
@@ -149,10 +149,32 @@ body {
   font-size: 10px;
 }
 
+.world-time {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
 .model-badge {
   background: var(--accent-dim);
   padding: 4px 8px;
   font-size: 8px;
+}
+
+.model-select {
+  background: var(--bg-panel);
+  border: 2px solid var(--accent-dim);
+  color: var(--text);
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  max-width: 180px;
+}
+
+.model-select:hover,
+.model-select:focus {
+  border-color: var(--accent);
+  outline: none;
 }
 
 .logout-btn {
@@ -240,6 +262,41 @@ body {
   text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
 }
 
+.player-health {
+  position: absolute;
+  bottom: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 6px;
+  color: white;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 1px 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  z-index: 5;
+}
+
+.player-model-badge {
+  position: absolute;
+  bottom: 0px;
+  right: 0px;
+  font-size: 4px;
+  color: white;
+  background: rgba(0, 0, 0, 0.9);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  transform: translateX(50%) translateY(50%) rotate(-45deg);
+  transform-origin: center;
+  white-space: nowrap;
+  z-index: 5;
+}
+
 .player-labels {
   position: absolute;
   top: 0;
@@ -301,6 +358,10 @@ body {
   overflow: hidden;
 }
 
+.player-status.visible {
+  opacity: 1;
+}
+
 .player-status-wrapper:hover .player-status {
   opacity: 1;
 }
@@ -330,6 +391,7 @@ body {
   display: inline-block;
   flex-shrink: 0;
   padding-right: 20px;
+  padding-left: 100%;
 }
 
 .status-text-scrolling .status-text-content:first-child {
@@ -389,8 +451,13 @@ body {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .soul-text {
@@ -501,17 +568,17 @@ body {
   .game-main {
     flex-direction: column;
   }
-  
+
   .game-sidebar {
     width: 100%;
   }
-  
+
   .game-header {
     flex-direction: column;
     gap: 12px;
     text-align: center;
   }
-  
+
   .player-info {
     flex-wrap: wrap;
     justify-content: center;

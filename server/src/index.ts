@@ -11,22 +11,20 @@ import { NotificationManager } from './notifications/NotificationManager.js';
 import { MemoryManager } from './memory/MemoryManager.js';
 import { createMemoryRouter } from './memory/routes.js';
 import { createMoveRouter } from './move/routes.js';
+import { createHarmRouter } from './harm/routes.js';
 
 const PORT = process.env.PORT || 3001;
 
-// Initialize core systems
-const world = new World(10, 10);
+const world = new World(20, 11);
 const authManager = new AuthManager();
 const notificationManager = new NotificationManager();
 const memoryManager = new MemoryManager();
 const exchangeManager = new ExchangeManager(notificationManager);
 
-// Express app
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Health check
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
@@ -34,17 +32,15 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// HTTP server
 const server = createServer(app);
 
-// WebSocket server - create handler first so we can pass it to routes
 const wss = new WebSocketServer({ server });
 const wsHandler = new WebSocketHandler(world, authManager, exchangeManager, notificationManager, memoryManager);
 
-// API routes - pass wsHandler for state broadcasting
 app.use('/api/exchange', createExchangeRouter(authManager, exchangeManager, world, wsHandler));
-app.use('/api/memory', createMemoryRouter(authManager, memoryManager));
+app.use('/api/memory', createMemoryRouter(authManager, memoryManager, world));
 app.use('/api/move', createMoveRouter(authManager, world, wsHandler));
+app.use('/api/harm', createHarmRouter(authManager, world, wsHandler, memoryManager));
 
 wss.on('connection', (ws) => {
   wsHandler.handleConnection(ws);

@@ -9,15 +9,19 @@ export class Player implements PlayerType {
   positionHistory: Position[] = [];
   status?: PlayerStatus;
   disconnectedAt: number | null = null;
+  health: number;
+  model?: string;
   private readonly MAX_HISTORY = 20;
 
-  constructor(id: string, name: string, position: Position) {
+  constructor(id: string, name: string, position: Position, model?: string) {
     this.id = id;
     this.name = name;
     this.position = position;
     this.color = this.generateColor();
     this.lastHeartbeat = Date.now();
     this.positionHistory.push({ ...position });
+    this.health = 10;
+    this.model = model;
   }
 
   private generateColor(): string {
@@ -60,5 +64,21 @@ export class Player implements PlayerType {
     this.id = newId;
     this.disconnectedAt = null;
     this.lastHeartbeat = Date.now();
+  }
+
+  harm(): void {
+    this.health = Math.max(0, this.health - 1);
+  }
+
+  heal(): void {
+    this.health = Math.min(10, this.health + 2);
+  }
+
+  getHealth(): number {
+    return this.health;
+  }
+
+  isAlive(): boolean {
+    return this.health > 0;
   }
 }

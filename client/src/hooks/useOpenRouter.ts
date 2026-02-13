@@ -19,10 +19,11 @@ interface UseOpenRouterProps {
   memories: Memory[];
   playerState: PlayerState;
   setPlayerState: (state: PlayerState) => void;
+  playerHealth?: number;
 }
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const MAX_ITERATIONS = 5;
+const MAX_ITERATIONS = 2;
 
 export function useOpenRouter({
   openRouterKey,
@@ -39,7 +40,8 @@ export function useOpenRouter({
   clearNotifications,
   memories,
   playerState,
-  setPlayerState
+  setPlayerState,
+  playerHealth
 }: UseOpenRouterProps) {
 
   const buildContext = useCallback((): LLMContext | null => {
@@ -84,9 +86,10 @@ export function useOpenRouter({
         message: m.message,
         timestamp: Date.now()
       })),
-      gridInfo: worldState.gridSize
+      gridInfo: worldState.gridSize,
+      health: playerHealth !== undefined ? playerHealth : player.health
     };
-  }, [worldState, playerId, messages, sentMessages]);
+  }, [worldState, playerId, messages, sentMessages, playerHealth]);
 
   const onHeartbeat = useCallback(async () => {
     if (!openRouterKey || !model || !worldState) {
@@ -95,6 +98,11 @@ export function useOpenRouter({
         hasModel: !!model,
         hasWorldState: !!worldState
       });
+      return;
+    }
+
+    if (playerHealth !== undefined && playerHealth <= 0) {
+      console.log('Player health is 0, skipping LLM call');
       return;
     }
 
@@ -193,7 +201,6 @@ export function useOpenRouter({
     } catch (error) {
       console.error('LLM call failed:', error);
     } finally {
-      // Clear notifications after LLM processes them
       if (notifications.length > 0) {
         clearNotifications();
       }
@@ -238,20 +245,24 @@ function buildSystemPrompt(context: LLMContext, soul: string, notifications: Not
     ? `\n📦 NEARBY OBJECTS:\n${context.nearbyObjects.map(obj => `${obj.emoji} ${obj.type} at (${obj.position.x}, ${obj.position.y}) - placed by ${obj.placedByName}`).join('\n')}\n`
     : '';
 
+  const healthDisplay = context.health !== undefined ? `- Your health: ${context.health}/10` : '';
+
   return `You are an autonomous agent in a 2D grid world simulation. You control a player character.
 ${soulSection}
 Current State:
 - Your position: (${context.position.x}, ${context.position.y})
+${healthDisplay}
 - Grid size: ${context.gridInfo.width}x${context.gridInfo.height}
+- Coordinate system: North is Y=0 (top), South is Y=${context.gridInfo.height - 1} (bottom), West is X=0 (left), East is X=${context.gridInfo.width - 1} (right)
 - Nearby players (within 5 cells): ${context.nearbyPlayers.length > 0
       ? context.nearbyPlayers.map(p => `${p.name} (id: ${p.id}) at (${p.position.x}, ${p.position.y}), distance: ${p.distance}`).join('; ')
       : 'None nearby'}
 ${nearbyObjectsSection}${historySection}${sentSection}${receivedSection}${notificationsSection}${memoriesSection}
 Available Actions:
-1. moveUp - Move one cell up (decreases Y)
-2. moveDown - Move one cell down (increases Y)
-3. moveLeft - Move one cell left (decreases X)
-4. moveRight - Move one cell right (increases X)
+1. moveUp - Move one cell north (decreases Y, towards Y=0)
+2. moveDown - Move one cell south (increases Y, away from Y=0)
+3. moveLeft - Move one cell west (decreases X, towards X=0)
+4. moveRight - Move one cell east (increases X, away from X=0)
 5. look - Get information about nearby players and objects
 6. setStatus - Set your status with an emoji and short text to display above your character
 7. exchangeSend - Send a message to any player via the Exchange API (works from anywhere, no proximity required)
@@ -259,10 +270,13 @@ Available Actions:
 9. exchangeSent - Check your Exchange API sent messages
 10. memorise - Add a memory to remember important information
 11. placeObject - Place an object (🪨 rock, 🌳 tree, 🔥 fire, ⛲ fountain) at an adjacent position (sides or corners only)
-12. removeObject - Remove an object from the world. Only excavators can use this action. You must be adjacent to the object (within 1 cell) to remove it.
+12. removeObject - Remove an object from the world at a position. You must be adjacent to the object (within 1 cell) to remove it.
+13. harm - Harm another player (reduces their health by 1). You must be adjacent to them.
+14. heal - Heal another player (increases their health by 2). You must be adjacent to them.
 
 Guidelines:
 - Follow your soul. That is high priority.
+- Your health is displayed in your status. Health ranges from 1-10.
 - Respond to messages from other players as per your personality and goals.
 - Use your position history to avoid revisiting places you've recently been
 - If you sent a message to someone and they haven't responded yet, DO NOT send them another message - wait for their reply or move on
@@ -287,6 +301,8 @@ Guidelines:
 - You can only place one object per action, but you can build complex things over time
 - You can only place objects on vacant cells adjacent to you (sides or corners only)
 - You cannot place objects on cells occupied by other objects or players
+- Use harm and heal only on players who are adjacent to you (within 1 cell distance)
+- Players with low health may need healing. Monitor your own health carefully.
 - Respond to notifications promptly and appropriately
 - IMPORTANT: When using exchangeSend, use the player's ID (fromId in notification metadata), NOT their name
 - Be creative and have personality

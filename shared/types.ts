@@ -15,6 +15,8 @@ export interface Player {
   color: string;
   positionHistory?: Position[];
   status?: PlayerStatus;
+  health?: number;
+  model?: string;
 }
 
 export interface WorldObject {
@@ -31,6 +33,7 @@ export interface WorldState {
   players: Player[];
   objects: WorldObject[];
   gridSize: { width: number; height: number };
+  createdAt: number;
 }
 
 export type Direction = 'up' | 'down' | 'left' | 'right';
@@ -52,6 +55,7 @@ export interface JoinMessage {
   type: 'join';
   name: string;
   playerId: string;
+  model?: string;
 }
 
 export interface LeaveMessage {
@@ -101,6 +105,8 @@ export interface HeartbeatMessage {
   type: 'heartbeat';
   notifications?: Notification[];
   memories?: Memory[];
+  worldTime?: { createdAt: number; serverTime: number };
+  health?: number;
 }
 
 export interface StateMessage {
@@ -173,6 +179,7 @@ export interface LLMContext {
     timestamp: number;
   }>;
   gridInfo: { width: number; height: number };
+  health?: number;
 }
 
 export interface LLMTool {

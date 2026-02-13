@@ -1,36 +1,83 @@
+import { useState, useEffect, useRef } from 'react';
 import { PlayerConfig } from '../App';
 import Grid from './Grid';
 import { WorldState, Notification, Memory } from '../../../shared/types';
 import { PlayerState } from '../hooks/useWebSocket';
+import { AVAILABLE_MODELS } from '../models';
+
+function formatElapsed(ms: number): string {
+  if (ms < 0 || !Number.isFinite(ms)) return '0:00';
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
 interface GameProps {
   playerConfig: PlayerConfig;
   worldState: WorldState | null;
+  worldTime: { createdAt: number; serverTime: number } | null;
   notifications: Notification[];
   memories: Memory[];
   playerState: PlayerState;
   onLogout: () => void;
   onSoulChange: (soul: string) => void;
+  onModelChange: (model: string) => void;
 }
 
 export default function Game({
   playerConfig,
   worldState,
+  worldTime,
   notifications,
   memories,
   playerState,
   onLogout,
-  onSoulChange
+  onSoulChange,
+  onModelChange
 }: GameProps) {
   const currentPlayer = worldState?.players.find(p => p.id === playerConfig.id);
+  const [tick, setTick] = useState(0);
+  const worldTimeReceivedAtRef = useRef(0);
+
+  useEffect(() => {
+    if (worldTime) worldTimeReceivedAtRef.current = Date.now();
+  }, [worldTime]);
+
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const elapsedMs = worldTime
+    ? worldTime.serverTime - worldTime.createdAt + (Date.now() - worldTimeReceivedAtRef.current)
+    : 0;
 
   return (
     <div className="game-container">
       <header className="game-header">
         <h1>AISims</h1>
+        {worldTime != null && (
+          <span className="world-time" title="World elapsed time">
+            ⏱ {formatElapsed(elapsedMs)}
+          </span>
+        )}
         <div className="player-info">
           <span>{playerConfig.name}</span>
-          <span className="model-badge">{playerConfig.model.split('/')[1]}</span>
+          <select
+            className="model-select"
+            value={playerConfig.model}
+            onChange={(e) => onModelChange(e.target.value)}
+            title="LLM model"
+          >
+            {AVAILABLE_MODELS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
           <button onClick={onLogout} className="logout-btn">Logout</button>
         </div>
       </header>

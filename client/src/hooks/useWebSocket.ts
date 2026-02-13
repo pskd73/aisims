@@ -31,6 +31,8 @@ export function useWebSocket(options?: UseWebSocketOptions) {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [playerState, setPlayerState] = useState<PlayerState>('idle');
   const [apiKey, setApiKey] = useState<string>('');
+  const [worldTime, setWorldTime] = useState<{ createdAt: number; serverTime: number } | null>(null);
+  const [playerHealth, setPlayerHealth] = useState<number | undefined>(undefined);
   const wsRef = useRef<WebSocket | null>(null);
   const onHeartbeatRef = useRef(options?.onHeartbeat);
   const worldStateRef = useRef<WorldState | null>(null);
@@ -71,6 +73,9 @@ export function useWebSocket(options?: UseWebSocketOptions) {
     switch (message.type) {
       case 'state':
         setWorldState(message.world);
+        if (message.world.createdAt != null) {
+          setWorldTime({ createdAt: message.world.createdAt, serverTime: Date.now() });
+        }
         break;
       case 'joined':
         console.log('Player joined:', message.player);
@@ -85,15 +90,18 @@ export function useWebSocket(options?: UseWebSocketOptions) {
         console.error('Server error:', message.message);
         break;
       case 'heartbeat':
-        // Store notifications from heartbeat
         if ('notifications' in message && message.notifications && message.notifications.length > 0) {
           setNotifications(prev => [...prev, ...message.notifications!]);
         }
-        // Store memories from heartbeat
         if ('memories' in message && message.memories && message.memories.length > 0) {
           setMemories(message.memories);
         }
-        // Trigger LLM thinking if idle
+        if ('worldTime' in message && message.worldTime) {
+          setWorldTime(message.worldTime);
+        }
+        if ('health' in message && message.health !== undefined) {
+          setPlayerHealth(message.health);
+        }
         if (playerStateRef.current === 'idle') {
           onHeartbeatRef.current?.();
         } else {
@@ -141,14 +149,14 @@ export function useWebSocket(options?: UseWebSocketOptions) {
     }
   }, []);
 
-  const joinGame = useCallback((playerId: string, name: string) => {
+  const joinGame = useCallback((playerId: string, name: string, model?: string) => {
     if (!isConnected) {
       connect();
       setTimeout(() => {
-        send({ type: 'join', playerId, name });
+        send({ type: 'join', playerId, name, model });
       }, 100);
     } else {
-      send({ type: 'join', playerId, name });
+      send({ type: 'join', playerId, name, model });
     }
   }, [isConnected, connect, send]);
 
@@ -170,6 +178,7 @@ export function useWebSocket(options?: UseWebSocketOptions) {
     }
     setIsConnected(false);
     setWorldState(null);
+    setWorldTime(null);
     setMessages([]);
     setSentMessages([]);
     setNotifications([]);
@@ -189,6 +198,7 @@ export function useWebSocket(options?: UseWebSocketOptions) {
   return {
     isConnected,
     worldState,
+    worldTime,
     messages,
     sentMessages,
     notifications,
@@ -197,6 +207,7 @@ export function useWebSocket(options?: UseWebSocketOptions) {
     playerState,
     setPlayerState,
     apiKey,
+    playerHealth,
     joinGame,
     setStatus,
     placeObject,

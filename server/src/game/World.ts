@@ -15,27 +15,31 @@ export class World {
   private grid: (Occupant | null)[][];
   private gridSize: { width: number; height: number };
   private lookRadius: number = 5;
+  private readonly createdAt: number;
 
   constructor(width: number = 10, height: number = 10) {
     this.gridSize = { width, height };
-    // Initialize grid matrix - null means empty
+    this.createdAt = Date.now();
     this.grid = Array(height).fill(null).map(() => Array(width).fill(null));
   }
 
-  addPlayer(id: string, name: string): Player {
-    // Check if player with this name already exists (reconnecting)
+  getCreatedAt(): number {
+    return this.createdAt;
+  }
+
+  addPlayer(id: string, name: string, model?: string): Player {
     const existingPlayer = this.findPlayerByName(name);
 
     if (existingPlayer) {
-      // Player is reconnecting - reuse same player, update ID
       const oldId = existingPlayer.id;
       existingPlayer.reconnect(id);
+      if (model) {
+        existingPlayer.model = model;
+      }
 
-      // Update map with new ID
       this.players.delete(oldId);
       this.players.set(id, existingPlayer);
 
-      // Update grid with new ID
       this.grid[existingPlayer.position.y][existingPlayer.position.x] = {
         type: 'player',
         id: existingPlayer.id,
@@ -45,11 +49,9 @@ export class World {
       return existingPlayer;
     }
 
-    // New player - find random spawn position
     const position = this.findSpawnPosition();
-    const player = new Player(id, name, position);
+    const player = new Player(id, name, position, model);
     this.players.set(id, player);
-    // Place player on grid
     this.grid[position.y][position.x] = {
       type: 'player',
       id: player.id,
@@ -70,7 +72,6 @@ export class World {
   removePlayer(id: string): void {
     const player = this.players.get(id);
     if (player) {
-      // Mark as disconnected instead of removing
       player.markDisconnected();
     }
   }
@@ -79,7 +80,6 @@ export class World {
     const now = Date.now();
     for (const [id, player] of this.players) {
       if (player.isDisconnected() && player.disconnectedAt && (now - player.disconnectedAt) > maxDisconnectTimeMs) {
-        // Clear from grid
         this.grid[player.position.y][player.position.x] = null;
         this.players.delete(id);
       }
@@ -106,16 +106,20 @@ export class World {
         position: p.position,
         color: p.color,
         positionHistory: p.getPositionHistory(),
-        status: p.status
+        status: p.status,
+        health: p.getHealth(),
+        model: p.model
       })),
       objects: this.getObjects(),
-      gridSize: this.gridSize
+      gridSize: this.gridSize,
+      createdAt: this.createdAt
     };
   }
 
   setPlayerStatus(id: string, emoji: string, text: string): boolean {
     const player = this.players.get(id);
     if (!player) return false;
+    if (!player.isAlive()) return false;
     player.setStatus(emoji, text);
     return true;
   }
@@ -123,6 +127,7 @@ export class World {
   movePlayer(id: string, direction: Direction): { success: boolean; message: string } {
     const player = this.players.get(id);
     if (!player) return { success: false, message: 'Player not found' };
+    if (!player.isAlive()) return { success: false, message: 'Player is incapacitated (health is 0)' };
 
     const newPos = { ...player.position };
     const currentPos = { ...player.position };
@@ -142,7 +147,6 @@ export class World {
         break;
     }
 
-    // Check if player is already at edge and cannot move further
     if (newPos.x === currentPos.x && newPos.y === currentPos.y) {
       const edgeInfo = direction === 'up' ? 'top edge' :
         direction === 'down' ? 'bottom edge' :
@@ -150,7 +154,6 @@ export class World {
       return { success: false, message: `Cannot move ${direction} - already at ${edgeInfo} of the world` };
     }
 
-    // Check what is occupying the position using the unified grid
     const occupant = this.grid[newPos.y][newPos.x];
     if (occupant) {
       if (occupant.type === 'player') {
@@ -161,13 +164,10 @@ export class World {
       }
     }
 
-    // Clear old position
     this.grid[currentPos.y][currentPos.x] = null;
 
-    // Update player position
     player.updatePosition(newPos);
 
-    // Place player at new position
     this.grid[newPos.y][newPos.x] = {
       type: 'player',
       id: player.id,
@@ -183,13 +183,15 @@ export class World {
     placedBy: string,
     placedByName: string
   ): WorldObject | null {
-    // Check bounds
+    const player = this.players.get(placedBy);
+    if (!player || !player.isAlive()) {
+      return null;
+    }
     if (position.x < 0 || position.x >= this.gridSize.width ||
       position.y < 0 || position.y >= this.gridSize.height) {
       return null;
     }
 
-    // Check if position is occupied (by anything)
     const occupant = this.grid[position.y][position.x];
     if (occupant) {
       return null;
@@ -212,10 +214,8 @@ export class World {
       placedAt: Date.now()
     };
 
-    // Add to objects map
     this.objects.set(object.id, object);
 
-    // Place on grid
     this.grid[position.y][position.x] = {
       type: 'object',
       id: object.id,
@@ -234,24 +234,23 @@ export class World {
     const object = this.objects.get(occupant.id);
     if (!object) return false;
 
-    // Clear from grid
     this.grid[position.y][position.x] = null;
 
-    // Remove from objects map
     this.objects.delete(occupant.id);
     return true;
   }
 
-  removeObjectByExcavator(position: Position, excavatorId: string): { success: boolean; message: string } {
-    // Check if excavator exists
-    const excavator = this.players.get(excavatorId);
-    if (!excavator) {
-      return { success: false, message: 'Excavator not found' };
+  removeObjectAtPosition(position: Position, playerId: string): { success: boolean; message: string } {
+    const player = this.players.get(playerId);
+    if (!player) {
+      return { success: false, message: 'Player not found' };
+    }
+    if (!player.isAlive()) {
+      return { success: false, message: 'Player is incapacitated (health is 0)' };
     }
 
-    // Check if excavator is adjacent to the position
-    if (!this.isAdjacentToPlayer(excavatorId, position)) {
-      return { success: false, message: 'Excavator must be adjacent to the object to remove it' };
+    if (!this.isAdjacentToPlayer(playerId, position)) {
+      return { success: false, message: 'You must be adjacent to the object to remove it' };
     }
 
     const occupant = this.grid[position.y][position.x];
@@ -264,10 +263,7 @@ export class World {
       return { success: false, message: 'Object not found' };
     }
 
-    // Clear from grid
     this.grid[position.y][position.x] = null;
-
-    // Remove from objects map
     this.objects.delete(occupant.id);
     return { success: true, message: 'Object removed successfully' };
   }
@@ -306,7 +302,6 @@ export class World {
       }))
       .filter(p => p.distance <= this.lookRadius);
 
-    // Get nearby objects within look radius
     const nearbyObjects = this.getObjects().filter(obj => {
       const distance = this.getDistance(player.position, obj.position);
       return distance <= this.lookRadius;
@@ -356,11 +351,73 @@ export class World {
     const dx = Math.abs(pos.x - player.position.x);
     const dy = Math.abs(pos.y - player.position.y);
 
-    // Must be adjacent (including diagonals), max 1 cell away in any direction
     return dx <= 1 && dy <= 1 && (dx > 0 || dy > 0);
   }
 
   private getDistance(a: Position, b: Position): number {
     return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  }
+
+  harmPlayer(attackerId: string, targetId: string): { success: boolean; message: string } {
+    const attacker = this.players.get(attackerId);
+    const target = this.players.get(targetId);
+
+    if (!attacker) {
+      return { success: false, message: 'Attacker not found' };
+    }
+    if (!attacker.isAlive()) {
+      return { success: false, message: 'Attacker is incapacitated (health is 0)' };
+    }
+
+    if (!target) {
+      return { success: false, message: 'Target player not found' };
+    }
+
+    if (attackerId === targetId) {
+      return { success: false, message: 'Cannot harm yourself' };
+    }
+
+    const distance = this.getDistance(attacker.position, target.position);
+    if (distance > 1) {
+      return { success: false, message: `Target is too far away (distance: ${distance}). You must be adjacent (within 1 cell) to harm them.` };
+    }
+
+    target.harm();
+    return { success: true, message: `Harmed ${target.name}. Their health is now ${target.getHealth()}/10.` };
+  }
+
+  healPlayer(healerId: string, targetId: string): { success: boolean; message: string } {
+    const healer = this.players.get(healerId);
+    const target = this.players.get(targetId);
+
+    if (!healer) {
+      return { success: false, message: 'Healer not found' };
+    }
+    if (!healer.isAlive()) {
+      return { success: false, message: 'Healer is incapacitated (health is 0)' };
+    }
+
+    if (!target) {
+      return { success: false, message: 'Target player not found' };
+    }
+
+    if (healerId === targetId) {
+      return { success: false, message: 'Cannot heal yourself' };
+    }
+
+    const distance = this.getDistance(healer.position, target.position);
+    if (distance > 1) {
+      return { success: false, message: `Target is too far away (distance: ${distance}). You must be adjacent (within 1 cell) to heal them.` };
+    }
+
+    const oldHealth = target.getHealth();
+    target.heal();
+    const newHealth = target.getHealth();
+    
+    if (oldHealth === newHealth && oldHealth === 10) {
+      return { success: false, message: `${target.name} already has maximum health (10/10)` };
+    }
+
+    return { success: true, message: `Healed ${target.name}. Their health is now ${target.getHealth()}/10.` };
   }
 }

@@ -13,16 +13,14 @@ export interface PlayerConfig {
 }
 
 function App() {
-  const [playerConfig, setPlayerConfig] = useState<PlayerConfig | null>(() => {
-    const saved = localStorage.getItem('playerConfig');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [playerConfig, setPlayerConfig] = useState<PlayerConfig | null>(null);
 
   const heartbeatCallbackRef = useRef<(() => void) | null>(null);
 
   const { 
     isConnected, 
-    worldState, 
+    worldState,
+    worldTime,
     messages, 
     sentMessages,
     notifications,
@@ -31,6 +29,7 @@ function App() {
     playerState,
     setPlayerState,
     apiKey,
+    playerHealth,
     joinGame, 
     setStatus,
     placeObject,
@@ -56,7 +55,8 @@ function App() {
     clearNotifications,
     memories,
     playerState,
-    setPlayerState
+    setPlayerState,
+    playerHealth
   });
 
   useEffect(() => {
@@ -65,15 +65,9 @@ function App() {
 
   useEffect(() => {
     if (isConnected && playerConfig) {
-      joinGame(playerConfig.id, playerConfig.name);
+      joinGame(playerConfig.id, playerConfig.name, playerConfig.model);
     }
   }, [isConnected, playerConfig, joinGame]);
-
-  useEffect(() => {
-    if (playerConfig) {
-      localStorage.setItem('playerConfig', JSON.stringify(playerConfig));
-    }
-  }, [playerConfig]);
 
   const handleJoin = (config: PlayerConfig) => {
     setPlayerConfig(config);
@@ -81,12 +75,15 @@ function App() {
 
   const handleLogout = () => {
     disconnect();
-    localStorage.removeItem('playerConfig');
     setPlayerConfig(null);
   };
 
   const handleSoulChange = (soul: string) => {
     setPlayerConfig(prev => prev ? { ...prev, soul } : null);
+  };
+
+  const handleModelChange = (model: string) => {
+    setPlayerConfig(prev => prev ? { ...prev, model } : null);
   };
 
   if (!playerConfig) {
@@ -97,11 +94,13 @@ function App() {
     <Game
       playerConfig={playerConfig}
       worldState={worldState}
+      worldTime={worldTime}
       notifications={notifications}
       memories={memories}
       playerState={playerState}
       onLogout={handleLogout}
       onSoulChange={handleSoulChange}
+      onModelChange={handleModelChange}
     />
   );
 }

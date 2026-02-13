@@ -11,13 +11,11 @@ export class AuthManager {
   private playerToKey: Map<string, string> = new Map(); // playerId -> apiKey
 
   generateKey(playerId: string, name: string): string {
-    // Remove old key if exists
     const oldKey = this.playerToKey.get(playerId);
     if (oldKey) {
       this.auths.delete(oldKey);
     }
 
-    // Generate new key
     const apiKey = `sk-${randomBytes(32).toString('hex')}`;
     const auth: PlayerAuth = { playerId, apiKey, name };
     

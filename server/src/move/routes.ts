@@ -10,7 +10,6 @@ export function createMoveRouter(
 ): Router {
   const router = Router();
 
-  // Middleware to validate API key
   const requireAuth = (req: Request, res: Response, next: Function) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -27,7 +26,6 @@ export function createMoveRouter(
     next();
   };
 
-  // POST /api/move - Move in a direction
   router.post('/', requireAuth, (req: Request, res: Response) => {
     const auth = (req as any).auth;
     const { direction } = req.body;
@@ -36,10 +34,14 @@ export function createMoveRouter(
       return res.status(400).json({ error: 'Invalid direction. Must be up, down, left, or right' });
     }
 
+    const player = world.getPlayer(auth.playerId);
+    if (!player || !player.isAlive()) {
+      return res.status(403).json({ success: false, error: 'Player is incapacitated (health is 0)' });
+    }
+
     const result = world.movePlayer(auth.playerId, direction as 'up' | 'down' | 'left' | 'right');
     
     if (result.success) {
-      // Broadcast state change to all WebSocket clients
       wsHandler.broadcastState(world);
       res.json({ success: true, message: result.message, position: world.getPlayer(auth.playerId)?.position });
     } else {

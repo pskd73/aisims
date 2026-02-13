@@ -1,23 +1,6 @@
 import { useState } from 'react';
 import { PlayerConfig } from '../App';
-
-const AVAILABLE_MODELS = [
-  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
-  { id: 'anthropic/claude-3-opus', name: 'Claude 3 Opus' },
-  { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5' },
-  { id: 'openai/gpt-4o', name: 'GPT-4o' },
-  { id: 'openai/gpt-4-turbo', name: 'GPT-4 Turbo' },
-  { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini' },
-  { id: 'openai/gpt-5-nano', name: 'GPT-5 Nano' },
-  { id: 'moonshotai/kimi-k2.5', name: 'Kimi K2.5' },
-  { id: 'meta-llama/llama-3.1-70b-instruct', name: 'Llama 3.1 70B' },
-  { id: 'meta-llama/llama-3.1-8b-instruct', name: 'Llama 3.1 8B' },
-  { id: 'google/gemini-pro-1.5', name: 'Gemini Pro 1.5' },
-  { id: 'mistralai/mistral-large', name: 'Mistral Large' },
-  { id: 'minimax/minimax-m2.5', name: 'Minimax M2.5' },
-  { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2' },
-  { id: 'x-ai/grok-4.1-fast', name: 'Grok 4.1 Fast' },
-];
+import { AVAILABLE_MODELS } from '../models';
 
 interface JoinScreenProps {
   onJoin: (config: PlayerConfig) => void;
