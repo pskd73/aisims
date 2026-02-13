@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
-import { PlayerStatus } from '../../../shared/types';
+import { useEffect, useState, useRef } from "react";
+import { PlayerStatus } from "../../../shared/types";
 
 interface StatusDisplayProps {
   status?: PlayerStatus;
@@ -8,7 +8,7 @@ interface StatusDisplayProps {
 export default function StatusDisplay({ status }: StatusDisplayProps) {
   const [isVisible, setIsVisible] = useState(false);
   const previousStatusRef = useRef<string | undefined>(undefined);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!status) {
@@ -46,15 +46,21 @@ export default function StatusDisplay({ status }: StatusDisplayProps) {
   const needsScrolling = fullText.length > 12;
 
   return (
-    <div 
-      className={`player-status ${isVisible ? 'visible' : ''}`}
+    <div
+      className={`player-status ${isVisible ? "visible" : ""}`}
       title={status.text}
     >
-      <span className={`status-text ${needsScrolling ? 'status-text-scrolling' : ''}`}>
+      <span
+        className={`status-text ${
+          needsScrolling ? "status-text-scrolling" : ""
+        }`}
+      >
         {needsScrolling ? (
           <>
             <span className="status-text-content">{fullText}</span>
-            <span className="status-text-content" aria-hidden="true">{fullText}</span>
+            <span className="status-text-content" aria-hidden="true">
+              {fullText}
+            </span>
           </>
         ) : (
           fullText
