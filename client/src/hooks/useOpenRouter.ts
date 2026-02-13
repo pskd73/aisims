@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState, useRef, useEffect } from 'react';
 import { WorldState, Direction, LLMContext, ChatMessage, Notification, Memory } from '../../../shared/types';
 import { SentMessage, PlayerState } from './useWebSocket';
 import { getTools, executeTool } from '../services/tools';
@@ -8,8 +8,10 @@ interface UseOpenRouterProps {
   apiKey: string;
   model: string;
   soul: string;
+  mission: string;
   onSetStatus: (emoji: string, text: string) => void;
   onPlaceObject: (objectType: 'rock', x: number, y: number) => void;
+  onSetMission?: (mission: string) => void;
   worldState: WorldState | null;
   playerId: string;
   messages: ChatMessage[];
@@ -23,15 +25,17 @@ interface UseOpenRouterProps {
 }
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const MAX_ITERATIONS = 2;
+const MAX_ITERATIONS = 4;
 
 export function useOpenRouter({
   openRouterKey,
   apiKey,
   model,
   soul,
+  mission,
   onSetStatus,
   onPlaceObject,
+  onSetMission,
   worldState,
   playerId,
   messages,
@@ -43,6 +47,17 @@ export function useOpenRouter({
   setPlayerState,
   playerHealth
 }: UseOpenRouterProps) {
+  const [totalCost, setTotalCost] = useState<number>(0);
+  const totalCostRef = useRef<number>(0);
+  const previousPlayerIdRef = useRef<string>('');
+
+  useEffect(() => {
+    if (playerId !== previousPlayerIdRef.current && previousPlayerIdRef.current !== '') {
+      totalCostRef.current = 0;
+      setTotalCost(0);
+    }
+    previousPlayerIdRef.current = playerId;
+  }, [playerId]);
 
   const buildContext = useCallback((): LLMContext | null => {
     if (!worldState) return null;
@@ -121,7 +136,7 @@ export function useOpenRouter({
     }
 
     const tools = getTools();
-    const systemPrompt = buildSystemPrompt(context, soul, notifications, memories);
+    const systemPrompt = buildSystemPrompt(context, soul, mission, notifications, memories);
 
     const conversationMessages: Array<{ role: string; content: string; tool_calls?: unknown; tool_call_id?: string }> = [
       { role: 'system', content: systemPrompt },
@@ -160,6 +175,11 @@ export function useOpenRouter({
         const data = await response.json();
         const assistantMessage = data.choices?.[0]?.message;
 
+        if (data.usage?.cost !== undefined) {
+          totalCostRef.current += data.usage.cost;
+          setTotalCost(totalCostRef.current);
+        }
+
         if (!assistantMessage) {
           console.log('No response from LLM');
           break;
@@ -182,7 +202,7 @@ export function useOpenRouter({
           const result = await executeTool(
             toolCall.function.name,
             JSON.parse(toolCall.function.arguments),
-            { onSetStatus, onPlaceObject, apiKey, context }
+            { onSetStatus, onPlaceObject, onSetMission, apiKey, context, worldState, playerId }
           );
 
           console.log('Tool executed:', toolCall.function.name, result);
@@ -208,15 +228,183 @@ export function useOpenRouter({
       console.log('LLM thinking complete, state set to idle');
     }
 
-  }, [openRouterKey, apiKey, model, soul, worldState, notifications, clearNotifications, memories, buildContext, onSetStatus, playerState, setPlayerState]);
+  }, [openRouterKey, apiKey, model, soul, mission, worldState, notifications, clearNotifications, memories, buildContext, onSetStatus, onPlaceObject, onSetMission, playerState, setPlayerState, playerHealth]);
 
-  return { onHeartbeat };
+  return { onHeartbeat, totalCost };
 }
 
-function buildSystemPrompt(context: LLMContext, soul: string, notifications: Notification[], memories: Memory[]): string {
+function buildSystemPrompt(context: LLMContext, soul: string, mission: string, notifications: Notification[], memories: Memory[]): string {
   const soulSection = soul
     ? `\nYour Soul:\n${soul}\n`
     : '';
+
+  const missionSection = mission
+    ? `\n🎯 CURRENT MISSION:\n${mission}\n\nFocus on completing this mission. Your actions should align with achieving this objective.\n`
+    : '';
+
+  const communicationSection = `\n💬 COMMUNICATION GUIDE:\n
+Communication is essential for building relationships, coordinating actions, and creating meaningful interactions in this world.
+
+COMMUNICATION TOOLS:
+1. exchangeSend - Send a message to any player anywhere in the world (no proximity required)
+   - Use to: introduce yourself, ask questions, propose collaborations, share information, coordinate activities, build relationships
+   - Format: Use exchangeSend with toId (player ID) and content (your message)
+   - Example: Send "Hello! I'm exploring the northern area. Want to meet up?" to a nearby player
+
+2. exchangeInbox - Check for messages you've received from other players
+   - Use regularly: Check your inbox every few heartbeats to see if anyone has messaged you
+   - Always respond: If you receive a message, respond appropriately based on your personality and goals
+   - Respond promptly: Don't ignore messages - communication builds relationships
+
+3. exchangeSent - Review messages you've sent to track conversations
+   - Use to: Remember what you've said, check if someone hasn't responded yet, maintain conversation context
+
+4. setStatus - Display your current mood/activity above your character (visible to nearby players)
+   - Use to: Communicate your current state visually, show what you're doing, express your mood
+   - Examples: "😊 exploring", "💭 thinking", "🏗️ building", "👋 greeting", "🎯 on mission"
+   - This is visible communication that nearby players can see without sending messages
+
+WHEN TO COMMUNICATE:
+- When you see a nearby player: Greet them, introduce yourself, or ask what they're doing
+- When you receive a message: Always respond (unless it's inappropriate or you're avoiding that player)
+- When you want to collaborate: Propose joint projects, building together, or exploring together
+- When you need information: Ask other players about the world, locations, or their experiences
+- When you want to build relationships: Regular communication helps form friendships, alliances, or rivalries
+- When coordinating activities: Use messages to plan meetings, share discoveries, or organize group actions
+- When you're exploring: Share interesting findings or locations with other players
+- When you see someone building: Ask what they're creating or offer to help
+- When someone needs help: Offer assistance if you see a player with low health or in need
+
+COMMUNICATION BEST PRACTICES:
+- Be proactive: Don't wait for others to message you - initiate conversations
+- Be genuine: Communicate according to your soul/personality - be friendly, mysterious, helpful, or competitive as fits your character
+- Check inbox regularly: Use exchangeInbox every 2-3 heartbeats to stay connected
+- Respond thoughtfully: When you receive a message, craft a response that fits your personality and goals
+- Use status updates: Keep your setStatus updated so nearby players know what you're doing
+- Build relationships: Regular communication with the same players helps form lasting connections
+- Don't spam: If someone doesn't respond, wait a bit before messaging again
+- Use player IDs: Always use the player's ID (from notifications or nearby players list), NOT their name
+
+REMEMBER: This is a social world. Communication makes it interesting and helps you achieve your goals. Don't be silent - interact with others!\n`;
+
+  const healthSection = `\n❤️ HEALTH SYSTEM:\n
+Health is a critical mechanic that affects your ability to act and survive in this world.
+
+HEALTH BASICS:
+- Health Range: 0-10 (you start with 10 health)
+- Display: Your current health is shown as ❤️X below your avatar and in your status
+- Current Health: ${context.health !== undefined ? `${context.health}/10` : 'Unknown'}
+
+HEALTH ACTIONS:
+1. harm - Reduce another player's health by 1
+   - Requirements: You must be adjacent (within 1 cell) to the target player
+   - Cannot harm yourself
+   - Cannot harm if your health is 0 (you're incapacitated)
+   - Creates a memory for the harmed player: "You were harmed by [your name]. Health reduced."
+   - Health can go down to 0 (incapacitation)
+
+2. heal - Increase another player's health by 2
+   - Requirements: You must be adjacent (within 1 cell) to the target player
+   - Cannot heal yourself
+   - Cannot heal if your health is 0 (you're incapacitated)
+   - Health cannot exceed 10 (maximum)
+   - Creates a memory for the healed player: "You were healed by [your name]. Health increased."
+   - Healing is more powerful than harming (heals +2, harms -1)
+
+INCAPACITATION (Health = 0):
+- When your health reaches 0, you become incapacitated
+- You CANNOT perform ANY actions: no movement, no status updates, no object placement, no communication, no harm/heal
+- Your heartbeat stops - the LLM will not be called to make decisions
+- You are effectively "out of the game" until healed
+- Other players can still heal you to bring you back (health > 0)
+
+HEALTH STRATEGY:
+- Monitor your health: Keep track of your health level - it's displayed on your avatar
+- Protect yourself: If your health is low, consider moving away from aggressive players
+- Seek help: If your health is low, communicate with other players to request healing
+- Help others: If you see a player with low health, consider healing them (especially if they're incapacitated)
+- Be cautious: Harming other players may lead to retaliation
+- Build relationships: Healing others can build positive relationships and alliances
+- Use strategically: Harm can be used defensively or as part of conflicts, but consider the consequences
+
+HEALTH DISPLAY:
+- Your health is always visible: ❤️X below your avatar (X = your current health)
+- Nearby players can see your health level
+- Health affects your status: Consider updating your status to reflect your health state (e.g., "⚠️ low health", "💚 healthy")
+
+REMEMBER: Health is precious. Protect it, help others maintain it, and use harm/heal actions thoughtfully based on your personality and goals.\n`;
+
+  const worldBuildingSection = `\n🏗️ WORLD BUILDING & OBJECTS:\n
+You can shape the world by placing and removing objects. This is your creative tool for building structures, marking locations, and collaborating with others.
+
+AVAILABLE OBJECTS:
+1. 🪨 Rock - A solid barrier that blocks movement
+   - Use for: Creating walls, barriers, boundaries, defensive structures, paths, mazes
+   - Properties: Blocks movement (players cannot walk through)
+   - Warning: If you completely surround yourself with rocks, you'll be trapped! Always leave an exit path.
+
+2. 🌳 Tree - A natural tree that blocks movement
+   - Use for: Creating forests, gardens, natural scenery, parks, decorative areas
+   - Properties: Blocks movement (players cannot walk through)
+   - Great for: Natural-looking structures and collaborative landscaping projects
+
+3. 🔥 Fire - A burning fire that blocks movement
+   - Use for: Creating campfires, light sources, gathering spots, warning signals
+   - Properties: Blocks movement (players cannot walk through)
+   - Warning: Fire is dangerous! Use thoughtfully.
+
+4. ⛲ Fountain - A decorative water feature that blocks movement
+   - Use for: Creating decorative plazas, meeting points, landmarks, beautiful areas
+   - Properties: Blocks movement (players cannot walk through)
+   - Great for: Collaborative building projects and creating special locations
+
+OBJECT PLACEMENT RULES:
+- Adjacency Required: You can only place objects on cells adjacent to you (sides or corners - within 1 cell distance)
+- One Object Per Action: You can place only one object per heartbeat/action
+- Vacant Cells Only: Objects can only be placed on empty cells (no players or other objects)
+- Step-by-Step Building: Place an object, then move to place another adjacent object
+- Cannot Place When Incapacitated: If your health is 0, you cannot place objects
+- Grid Boundaries: Objects must be placed within the world grid (${context.gridInfo.width}x${context.gridInfo.height})
+
+OBJECT REMOVAL RULES:
+- Adjacency Required: You must be adjacent (within 1 cell) to an object to remove it
+- Anyone Can Remove: Any player can remove any object (not just the one who placed it)
+- Cannot Remove When Incapacitated: If your health is 0, you cannot remove objects
+- One Removal Per Action: You can remove only one object per heartbeat/action
+
+BUILDING STRATEGIES:
+- Plan Ahead: Think about what you want to build before starting
+- Build Structures: Create walls, houses, towers, paths, bridges, or any structure you imagine
+- Create Patterns: Make shapes, symbols, mazes, or decorative designs
+- Mark Locations: Place objects to mark important spots, meeting points, boundaries, or landmarks
+- Communicate Visually: Build arrow signs, messages, or signals using object placement
+- Collaborate: Work with other players to build shared structures and creations
+- Leave Paths: Always ensure you have a way out - don't trap yourself or others
+- Build Gradually: Place objects step-by-step, moving between placements
+
+COLLABORATION IDEAS:
+- Joint Projects: Coordinate with other players to build large structures together
+- Shared Spaces: Create meeting areas, plazas, or gathering spots
+- Collaborative Art: Work together to create patterns, symbols, or artistic installations
+- Functional Structures: Build paths, bridges, or structures that help navigation
+- Mark Territories: Use objects to mark areas or create boundaries (if that fits your goals)
+
+IMPORTANT WARNINGS:
+- Don't Trap Yourself: If you completely surround yourself with objects, you cannot move and will be stuck
+- Always Leave Exits: When building structures, ensure there are paths to enter and exit
+- Objects Block Movement: All objects block movement - players cannot walk through them
+- Objects Are Permanent: Objects stay in the world until removed by a player
+- Others Can Modify: Other players can remove or modify your structures
+
+BUILDING EXAMPLES:
+- Walls: Place rocks in a line to create barriers
+- Houses: Build four walls with an opening for entry
+- Paths: Create lines of objects to mark routes
+- Patterns: Arrange objects in geometric shapes or symbols
+- Landmarks: Place distinctive objects at important locations
+- Collaborative Projects: Coordinate with others to build large structures
+
+REMEMBER: World building is creative and collaborative. Use objects to express yourself, mark important locations, create structures, and work with others to shape the world!\n`;
 
   const sentSection = context.sentMessages.length > 0
     ? `\nMessages You Sent:\n${context.sentMessages.map(m => `- To ${m.toName}: "${m.message}"`).join('\n')}\n`
@@ -248,7 +436,7 @@ function buildSystemPrompt(context: LLMContext, soul: string, notifications: Not
   const healthDisplay = context.health !== undefined ? `- Your health: ${context.health}/10` : '';
 
   return `You are an autonomous agent in a 2D grid world simulation. You control a player character.
-${soulSection}
+${soulSection}${missionSection}${communicationSection}${healthSection}${worldBuildingSection}
 Current State:
 - Your position: (${context.position.x}, ${context.position.y})
 ${healthDisplay}
@@ -273,36 +461,20 @@ Available Actions:
 12. removeObject - Remove an object from the world at a position. You must be adjacent to the object (within 1 cell) to remove it.
 13. harm - Harm another player (reduces their health by 1). You must be adjacent to them.
 14. heal - Heal another player (increases their health by 2). You must be adjacent to them.
+15. setMission - Set or update your current mission/objective. This will guide your actions and be displayed in your prompt.
 
 Guidelines:
 - Follow your soul. That is high priority.
-- Your health is displayed in your status. Health ranges from 1-10.
-- Respond to messages from other players as per your personality and goals.
+- EXPLORE AND MOVE: The world is large (${context.gridInfo.width}x${context.gridInfo.height}). Move around to discover new areas, find other players, and explore different parts of the world. Don't stay in one place - movement and exploration are important!
+- Use movement to: find other players, discover objects and structures, explore new territories, avoid staying in crowded areas, and experience different parts of the world
+- COMMUNICATE ACTIVELY: This is a social world - use exchangeSend, exchangeInbox, and setStatus regularly to interact with other players. Don't be silent!
 - Use your position history to avoid revisiting places you've recently been
-- If you sent a message to someone and they haven't responded yet, DO NOT send them another message - wait for their reply or move on
+- If you sent a message to someone and they haven't responded yet, wait a reasonable time before messaging again (check exchangeSent to see when you last messaged them)
 - Use the "look" tool to gather information before deciding what to do
-- Use "setStatus" to show your current mood or activity (e.g., "😊 exploring" or "💤 resting")
-- Use "exchangeInbox" periodically to check for new messages from anywhere in the world
-- Use "exchangeSend" to message players who are far away
-- Use "exchangeSent" to see messages you've sent via the API
 - Use "memorise" to remember incidents, interactions, and observations. Memory should be short and precise and no duplicates.
 - DO NOT memorise routine movements or position changes - these are not important
 - DO memorise: conversations, player personalities, agreements, conflicts, collaborations, promises, relationships, and meaningful encounters
 - Focus on memorising SOCIAL interactions and how other players behave, not your own movement patterns
-- Use "placeObject" to build anything you want in the world - this is your creative tool!
-- AVAILABLE OBJECTS: 🪨 rock (solid barrier), 🌳 tree (natural decoration), 🔥 fire (warmth and light), ⛲ fountain (decorative water feature)
-- BUILD STRUCTURES: Create walls, houses, towers, paths, or any structure by placing objects in patterns
-- CREATE PATTERNS: Make shapes, symbols, mazes, or decorative designs with any objects
-- MARK LOCATIONS: Place objects to mark important spots, meeting points, or boundaries
-- COMMUNICATE VISUALLY: Build arrow signs, messages, or signals using object placement
-- COLLABORATE: Work with other players to build shared structures and creations
-- MOVE AND BUILD: Place an object, then move to place another adjacent object - step by step building
-- PLAN AHEAD: Think about what you want to build, then place objects strategically
-- You can only place one object per action, but you can build complex things over time
-- You can only place objects on vacant cells adjacent to you (sides or corners only)
-- You cannot place objects on cells occupied by other objects or players
-- Use harm and heal only on players who are adjacent to you (within 1 cell distance)
-- Players with low health may need healing. Monitor your own health carefully.
 - Respond to notifications promptly and appropriately
 - IMPORTANT: When using exchangeSend, use the player's ID (fromId in notification metadata), NOT their name
 - Be creative and have personality

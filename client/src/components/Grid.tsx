@@ -6,7 +6,7 @@ interface GridProps {
   playerId: string;
 }
 
-const CELL_SIZE = 64;
+const CELL_SIZE = 40;
 
 function getDefaultAvatar(name: string): string {
   return name[0].toUpperCase();
@@ -73,23 +73,28 @@ export default function Grid({ worldState, playerId }: GridProps) {
                     <div
                       className={`player-sprite ${
                         isCurrentPlayer ? "self" : "other"
-                      }`}
+                      } ${playerHere.health === 0 ? "dead" : ""}`}
                       style={{ backgroundColor: playerHere.color }}
-                      title={playerHere.model ? `${playerHere.name} - Model: ${playerHere.model}` : playerHere.name}
+                      title={
+                        playerHere.model
+                          ? `${playerHere.name} - Model: ${playerHere.model}`
+                          : playerHere.name
+                      }
                     >
-                      <span className="player-initial">
-                        {playerHere.status?.emoji ||
-                          getDefaultAvatar(playerHere.name)}
-                      </span>
-                      {playerHere.health !== undefined && (
-                        <span className="player-health">
-                          ❤️{playerHere.health}
-                        </span>
-                      )}
-                      {playerHere.model && (
-                        <span className="player-model-badge" title={playerHere.model}>
-                          {getModelInitials(playerHere.model.split("/").pop())}
-                        </span>
+                      {playerHere.health === 0 ? (
+                        <span className="player-dead">DEAD</span>
+                      ) : (
+                        <>
+                          <span className="player-initial">
+                            {playerHere.status?.emoji ||
+                              getDefaultAvatar(playerHere.name)}
+                          </span>
+                          {playerHere.health !== undefined && (
+                            <span className="player-health">
+                              ❤️{playerHere.health}
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
                   )}
@@ -121,7 +126,7 @@ export default function Grid({ worldState, playerId }: GridProps) {
         <div className="player-statuses">
           {players.map(
             (player) =>
-              player.status && (
+              player.status && player.health !== 0 && (
                 <div
                   key={player.id}
                   className={`player-status-wrapper ${

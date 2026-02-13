@@ -1,4 +1,4 @@
-import { Direction, LLMTool, LLMContext, ExchangeMessage } from '../../../shared/types';
+import { Direction, LLMTool, LLMContext, ExchangeMessage, WorldState } from '../../../shared/types';
 import { apiBaseUrl } from '../config';
 
 const API_URL = `${apiBaseUrl}/api/exchange`;
@@ -48,8 +48,11 @@ function getObjectTypesList(): string {
 interface ToolContext {
   onSetStatus: (emoji: string, text: string) => void;
   onPlaceObject: (objectType: 'rock', x: number, y: number) => void;
+  onSetMission?: (mission: string) => void;
   apiKey: string;
   context: LLMContext;
+  worldState: WorldState | null;
+  playerId: string;
 }
 
 export function getTools(): LLMTool[] {
@@ -106,7 +109,7 @@ export function getTools(): LLMTool[] {
       type: 'function',
       function: {
         name: 'look',
-        description: 'Get information about nearby players and your surroundings',
+        description: 'Get information about all players in the world. Shows positions of all players, but only shows names and IDs for players nearby (within 5 cells).',
         parameters: {
           type: 'object',
           properties: {},
@@ -277,6 +280,23 @@ export function getTools(): LLMTool[] {
           required: ['targetId']
         }
       }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'setMission',
+        description: 'Set or update your current mission/objective. This mission will guide your actions and be displayed in your prompt.',
+        parameters: {
+          type: 'object',
+          properties: {
+            mission: {
+              type: 'string',
+              description: 'Your current mission or objective (e.g., "Explore the northern area", "Build a structure at (10,5)", "Find and help players with low health")'
+            }
+          },
+          required: ['mission']
+        }
+      }
     }
   ];
 }
@@ -318,15 +338,47 @@ export async function executeTool(
       }
     }
 
-    case 'look':
-      const nearby = ctx.context.nearbyPlayers;
-      if (nearby.length === 0) {
-        return { success: true, message: 'No players nearby' };
+    case 'look': {
+      if (!ctx.worldState) {
+        return { success: false, message: 'World state not available' };
       }
-      return { 
-        success: true, 
-        message: `Nearby players: ${nearby.map(p => `${p.name} at (${p.position.x}, ${p.position.y})`).join(', ')}` 
+      
+      const currentPos = ctx.context.position;
+      const nearbyPlayerIds = new Set(ctx.context.nearbyPlayers.map(p => p.id));
+      
+      const allPlayers = ctx.worldState.players
+        .filter(p => p.id !== ctx.playerId)
+        .map(p => {
+          const distance = Math.abs(p.position.x - currentPos.x) + Math.abs(p.position.y - currentPos.y);
+          const isNearby = nearbyPlayerIds.has(p.id);
+          return {
+            ...p,
+            distance,
+            isNearby
+          };
+        });
+      
+      if (allPlayers.length === 0) {
+        return { success: true, message: 'No other players in the world' };
+      }
+      
+      const nearbyInfo = ctx.context.nearbyPlayers.length > 0
+        ? `\nNearby players (within 5 cells):\n${ctx.context.nearbyPlayers.map(p => `- ${p.name} (id: ${p.id}) at (${p.position.x}, ${p.position.y}), distance: ${p.distance}`).join('\n')}`
+        : '\nNo players nearby (within 5 cells)';
+      
+      const allPositions = `\nAll player positions:\n${allPlayers.map(p => {
+        if (p.isNearby) {
+          return `- ${p.name} (id: ${p.id}) at (${p.position.x}, ${p.position.y})`;
+        } else {
+          return `- Unknown player at (${p.position.x}, ${p.position.y})`;
+        }
+      }).join('\n')}`;
+      
+      return {
+        success: true,
+        message: `Looking around...${nearbyInfo}${allPositions}`
       };
+    }
 
     case 'setStatus':
       const emoji = args.emoji as string;
@@ -532,6 +584,18 @@ export async function executeTool(
       } catch (error) {
         return { success: false, message: 'Network error healing player' };
       }
+    }
+
+    case 'setMission': {
+      const mission = args.mission as string;
+      if (!mission || typeof mission !== 'string') {
+        return { success: false, message: 'Missing or invalid mission' };
+      }
+      if (!ctx.onSetMission) {
+        return { success: false, message: 'Mission update not available' };
+      }
+      ctx.onSetMission(mission);
+      return { success: true, message: `Mission updated: "${mission}"` };
     }
 
     default:

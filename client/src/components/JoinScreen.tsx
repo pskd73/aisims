@@ -20,7 +20,8 @@ export default function JoinScreen({ onJoin }: JoinScreenProps) {
       name: name.trim(),
       apiKey: apiKey.trim(),
       model,
-      soul: ''
+      soul: '',
+      mission: ''
     };
     onJoin(config);
   };

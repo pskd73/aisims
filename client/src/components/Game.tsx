@@ -1,18 +1,21 @@
-import { useState, useEffect, useRef } from 'react';
-import { PlayerConfig } from '../App';
-import Grid from './Grid';
-import { WorldState, Notification, Memory } from '../../../shared/types';
-import { PlayerState } from '../hooks/useWebSocket';
-import { AVAILABLE_MODELS } from '../models';
+import { useState, useEffect, useRef } from "react";
+import { PlayerConfig } from "../App";
+import Grid from "./Grid";
+import { WorldState, Notification, Memory } from "../../../shared/types";
+import { PlayerState } from "../hooks/useWebSocket";
+import { AVAILABLE_MODELS } from "../models";
 
 function formatElapsed(ms: number): string {
-  if (ms < 0 || !Number.isFinite(ms)) return '0:00';
+  if (ms < 0 || !Number.isFinite(ms)) return "0:00";
   const totalSec = Math.floor(ms / 1000);
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
-  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  return `${m}:${s.toString().padStart(2, '0')}`;
+  if (h > 0)
+    return `${h}:${m.toString().padStart(2, "0")}:${s
+      .toString()
+      .padStart(2, "0")}`;
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 interface GameProps {
@@ -22,9 +25,11 @@ interface GameProps {
   notifications: Notification[];
   memories: Memory[];
   playerState: PlayerState;
+  totalCost: number;
   onLogout: () => void;
   onSoulChange: (soul: string) => void;
   onModelChange: (model: string) => void;
+  onMissionChange: (mission: string) => void;
 }
 
 export default function Game({
@@ -34,11 +39,15 @@ export default function Game({
   notifications,
   memories,
   playerState,
+  totalCost,
   onLogout,
   onSoulChange,
-  onModelChange
+  onModelChange,
+  onMissionChange,
 }: GameProps) {
-  const currentPlayer = worldState?.players.find(p => p.id === playerConfig.id);
+  const currentPlayer = worldState?.players.find(
+    (p) => p.id === playerConfig.id
+  );
   const [tick, setTick] = useState(0);
   const worldTimeReceivedAtRef = useRef(0);
 
@@ -52,7 +61,9 @@ export default function Game({
   }, []);
 
   const elapsedMs = worldTime
-    ? worldTime.serverTime - worldTime.createdAt + (Date.now() - worldTimeReceivedAtRef.current)
+    ? worldTime.serverTime -
+      worldTime.createdAt +
+      (Date.now() - worldTimeReceivedAtRef.current)
     : 0;
 
   return (
@@ -66,6 +77,12 @@ export default function Game({
         )}
         <div className="player-info">
           <span>{playerConfig.name}</span>
+          <span
+            className="cost-display"
+            title="Total LLM API cost for this session"
+          >
+            ${totalCost.toFixed(4)}
+          </span>
           <select
             className="model-select"
             value={playerConfig.model}
@@ -78,17 +95,16 @@ export default function Game({
               </option>
             ))}
           </select>
-          <button onClick={onLogout} className="logout-btn">Logout</button>
+          <button onClick={onLogout} className="logout-btn">
+            Logout
+          </button>
         </div>
       </header>
 
       <main className="game-main">
         <div className="game-world">
           {worldState ? (
-            <Grid 
-              worldState={worldState} 
-              playerId={playerConfig.id}
-            />
+            <Grid worldState={worldState} playerId={playerConfig.id} />
           ) : (
             <div className="loading">Connecting...</div>
           )}
@@ -99,14 +115,23 @@ export default function Game({
             <h3>Status</h3>
             {currentPlayer && (
               <div className="status-info">
-                <p>Position: ({currentPlayer.position.x}, {currentPlayer.position.y})</p>
+                <p>
+                  Position: ({currentPlayer.position.x},{" "}
+                  {currentPlayer.position.y})
+                </p>
                 <p>Players Online: {worldState?.players.length || 0}</p>
-                <p>Nearby: {worldState?.players.filter(p => 
-                  Math.abs(p.position.x - currentPlayer.position.x) + 
-                  Math.abs(p.position.y - currentPlayer.position.y) <= 5 &&
-                  p.id !== playerConfig.id
-                ).length || 0}</p>
-                <p className={`player-state player-state--${playerState}`}>State: {playerState}</p>
+                <p>
+                  Nearby:{" "}
+                  {worldState?.players.filter(
+                    (p) =>
+                      Math.abs(p.position.x - currentPlayer.position.x) +
+                        Math.abs(p.position.y - currentPlayer.position.y) <=
+                        5 && p.id !== playerConfig.id
+                  ).length || 0}
+                </p>
+                <p className={`player-state player-state--${playerState}`}>
+                  State: {playerState}
+                </p>
               </div>
             )}
           </div>
@@ -122,22 +147,47 @@ export default function Game({
             />
           </div>
 
+          <div className="mission-panel">
+            <h3>Mission</h3>
+            <textarea
+              className="mission-textarea"
+              value={playerConfig.mission}
+              onChange={(e) => onMissionChange(e.target.value)}
+              placeholder="Set your current mission or objective..."
+              rows={3}
+            />
+          </div>
+
           {notifications.length > 0 && (
             <div className="notifications-panel">
-              <h3>🚨 Notifications ({notifications.length})</h3>
+              <h3>Notifications ({notifications.length})</h3>
               <div className="notifications-list">
-                {notifications.slice(-5).reverse().map((notif, i) => (
-                  <div key={i} className="notification-item">
-                    <span className="notification-type">[{notif.type.toUpperCase()}]</span>
-                    <span className="notification-title">{notif.title}</span>
-                    <span className="notification-content">{notif.content}</span>
-                    {notif.metadata && (notif.metadata as Record<string, string>).fromId && (
-                      <span className="notification-sender">
-                        From: {(notif.metadata as Record<string, string>).fromName} ({(notif.metadata as Record<string, string>).fromId})
+                {notifications
+                  .slice(-5)
+                  .reverse()
+                  .map((notif, i) => (
+                    <div key={i} className="notification-item">
+                      <span className="notification-type">
+                        [{notif.type.toUpperCase()}]
                       </span>
-                    )}
-                  </div>
-                ))}
+                      <span className="notification-title">{notif.title}</span>
+                      <span className="notification-content">
+                        {notif.content}
+                      </span>
+                      {notif.metadata &&
+                        (notif.metadata as Record<string, string>).fromId && (
+                          <span className="notification-sender">
+                            From:{" "}
+                            {
+                              (notif.metadata as Record<string, string>)
+                                .fromName
+                            }{" "}
+                            ({(notif.metadata as Record<string, string>).fromId}
+                            )
+                          </span>
+                        )}
+                    </div>
+                  ))}
               </div>
             </div>
           )}
@@ -146,11 +196,14 @@ export default function Game({
             <div className="memories-panel">
               <h3>🧠 Memories ({memories.length})</h3>
               <div className="memories-list">
-                {memories.slice(-5).reverse().map((memory, i) => (
-                  <div key={i} className="memory-item">
-                    <span className="memory-content">{memory.content}</span>
-                  </div>
-                ))}
+                {memories
+                  .slice(-5)
+                  .reverse()
+                  .map((memory, i) => (
+                    <div key={i} className="memory-item">
+                      <span className="memory-content">{memory.content}</span>
+                    </div>
+                  ))}
               </div>
             </div>
           )}

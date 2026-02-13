@@ -16,12 +16,46 @@
   --grid-cell: #1a1a2e;
 }
 
+html {
+  scrollbar-gutter: stable;
+  overflow-y: hidden;
+  height: 100%;
+}
+
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   font-family: "Press Start 2P", monospace;
   background-color: var(--bg-darker);
   color: var(--text);
   font-size: 10px;
   line-height: 1.6;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-darker);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-panel);
+  border: 2px solid var(--bg-darker);
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-dim);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-panel) var(--bg-darker);
 }
 
 .join-screen {
@@ -119,9 +153,10 @@ body {
 }
 
 .game-container {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .game-header {
@@ -147,6 +182,15 @@ body {
 
 .player-info span {
   font-size: 10px;
+}
+
+.cost-display {
+  font-size: 10px;
+  color: var(--text-dim);
+  padding: 4px 8px;
+  background: var(--bg-dark);
+  border: 1px solid var(--accent-dim);
+  border-radius: 4px;
 }
 
 .world-time {
@@ -197,6 +241,8 @@ body {
   display: flex;
   gap: 24px;
   padding: 24px;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .game-world {
@@ -207,6 +253,7 @@ body {
   background: var(--bg-dark);
   border: 4px solid var(--accent-dim);
   overflow: auto;
+  min-width: 0;
 }
 
 .loading {
@@ -257,7 +304,7 @@ body {
 }
 
 .player-initial {
-  font-size: 28px;
+  font-size: 20px;
   color: white;
   text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
 }
@@ -277,6 +324,22 @@ body {
   text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.8);
   border: 1px solid rgba(255, 255, 255, 0.3);
   z-index: 5;
+}
+
+.player-sprite.dead {
+  opacity: 0.5;
+  filter: grayscale(100%);
+}
+
+.player-dead {
+  font-size: 8px;
+  font-weight: bold;
+  color: white;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+  background: rgba(139, 0, 0, 0.9);
+  padding: 2px 4px;
+  border-radius: 2px;
+  letter-spacing: 0.5px;
 }
 
 .player-model-badge {
@@ -412,11 +475,15 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 100%;
 }
 
 .status-panel,
 .action-log,
-.soul-panel {
+.soul-panel,
+.mission-panel {
   background: var(--bg-panel);
   border: 4px solid var(--accent-dim);
   padding: 16px;
@@ -424,7 +491,8 @@ body {
 
 .status-panel h3,
 .action-log h3,
-.soul-panel h3 {
+.soul-panel h3,
+.mission-panel h3 {
   font-size: 12px;
   color: var(--accent);
   margin-bottom: 12px;
@@ -485,6 +553,27 @@ body {
 }
 
 .soul-textarea::placeholder {
+  color: var(--text-dim);
+}
+
+.mission-textarea {
+  width: 100%;
+  padding: 8px;
+  background: var(--bg-dark);
+  border: 2px solid var(--accent-dim);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 8px;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.mission-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.mission-textarea::placeholder {
   color: var(--text-dim);
 }
 
